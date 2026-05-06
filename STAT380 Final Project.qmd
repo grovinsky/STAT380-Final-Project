@@ -1,6 +1,6 @@
 ---
 title: "STAT380 Final Project"
-author: Grace Rovinsky, Jiya Patel
+author: Grace Rovinsky, Jiya Patel, Min Liu
 format: pdf
 ---
 
