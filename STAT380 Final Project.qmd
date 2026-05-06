@@ -4,25 +4,25 @@ author: Grace Rovinsky, Jiya Patel
 format: pdf
 ---
 
-1. Set the stage–explain the context you’re trying to learn something about. MUST ANSWER: Why is this important to you?
-Have you ever wondered why a hummingbird needs to eat constantly while a 
-tortoise can go weeks without food? The answer comes down to metabolism — 
-the rate at which an organism burns energy to stay alive. Metabolism 
-affects nearly everything about how an animal lives, from its lifespan to 
+1. Set the stage–explain the context you're trying to learn something about. MUST ANSWER: Why is this important to you?
+Have you ever wondered why a hummingbird needs to eat constantly while a
+tortoise can go weeks without food? The answer comes down to metabolism —
+the rate at which an organism burns energy to stay alive. Metabolism
+affects nearly everything about how an animal lives, from its lifespan to
 its diet to how it copes with a changing climate.
 
-As data science students, we got curious about whether the numbers behind 
-metabolism could actually tell us something deeper — specifically, whether 
-metabolic rate alone is enough to distinguish between fundamentally 
+As data science students, we got curious about whether the numbers behind
+metabolism could actually tell us something deeper — specifically, whether
+metabolic rate alone is enough to distinguish between fundamentally
 different types of life, like mammals, birds, fish, and insects.
 
-Our research question is: Can we use metabolic rate to classify different 
+Our research question is: Can we use metabolic rate to classify different
 groups of organisms?
 
-This question matters because metabolism is basically life's engine. If we 
-can predict an organism's group just from how fast it burns energy, that 
-tells us something profound about how life is organized on Earth — and 
-could help scientists better understand how different species will respond 
+This question matters because metabolism is basically life's engine. If we
+can predict an organism's group just from how fast it burns energy, that
+tells us something profound about how life is organized on Earth — and
+could help scientists better understand how different species will respond
 as our planet continues to change.
 
 2. Explain the data provenance – Answer the Who, What, When, Where, Why, and How questions for the origin of the data. Include any additional information that would be useful in understanding the context in which the data are embedded.
@@ -31,53 +31,162 @@ https://www.pnas.org/doi/10.1073/pnas.2303764120
 https://www.pnas.org/doi/10.1073/pnas.2303764120#supplementary-materials
 https://en.wikipedia.org/wiki/Basal_metabolic_rate
 
-The data comes from a 2023 study by Tori M. Hoehler and colleagues, 
-published in the Proceedings of the National Academy of Sciences. They 
-pulled together over 10,000 metabolic rate measurements from 20+ published 
-studies and standardized everything to the same unit — watts at 25°C — so 
-that wildly different organisms like bacteria and mammals could actually 
+The data comes from a 2023 study by Tori M. Hoehler and colleagues,
+published in the Proceedings of the National Academy of Sciences. They
+pulled together over 10,000 metabolic rate measurements from 20+ published
+studies and standardized everything to the same unit — watts at 25°C — so
+that wildly different organisms like bacteria and mammals could actually
 be compared side by side.
 
-The dataset covers a huge range of life including mammals, birds, fish, 
-insects, bacteria, and tree saplings, and includes information like body 
-mass, temperature, and type of metabolic rate (basal, field, or maximum). 
-These variables are particularly important for our analysis because body 
-mass and metabolic rate are known to vary systematically across organism 
+The dataset covers a huge range of life including mammals, birds, fish,
+insects, bacteria, and tree saplings, and includes information like body
+mass, temperature, and type of metabolic rate (basal, field, or maximum).
+These variables are particularly important for our analysis because body
+mass and metabolic rate are known to vary systematically across organism
 groups, making them strong candidates for classification.
 
-This dataset was the perfect fit for our research question — can metabolic 
-rate be used to classify different groups of organisms — because it 
-provides standardized, cross-species data at a scale large enough to 
+This dataset was the perfect fit for our research question — can metabolic
+rate be used to classify different groups of organisms — because it
+provides standardized, cross-species data at a scale large enough to
 train and test machine learning models.
 
-3. Exploratory Data Analysis
-make 3-4 visualizations
+## 3. Exploratory Data Analysis
+
+Before fitting any models, I first wanted to understand the structure of the dataset itself. The Hoehler et al. data covers life across roughly twenty-two orders of magnitude in body mass, from very small bacteria to large mammals, so it is important to know where the data is dense, where it is sparse, and how the variables behave on their natural scale before doing any analysis. The four visualizations below were chosen because each one answers a question that directly affects how I set up the classification problem in §4.
+
+### 3.1 How many measurements do we actually have per group?
+
+Class imbalance is the first thing to check whenever the response variable is a category. If one group dominates the dataset, a model can score well by always predicting that group, even though it has not really learned anything. I restrict to the ten largest groups so the chart stays readable, and I also use this filter for downstream modeling because groups with fewer than 200 measurements would not give us enough data for a meaningful train/test split.
+
 ```{r}
-library(ggplot2)
 library(tidyverse)
+library(readxl)
+library(scales)
 
-clean_data <- metabolic_data %>%
+# Load the dataset.
+metabolic_data <- read_excel("pnas.2303764120.sd01.xlsx", sheet = "Metabolic_Data")
+
+# Top 10 groups by number of measurements where both mass and metabolic rate exist.
+top_groups <- metabolic_data %>%
   filter(!is.na(`Metabolic Rate (W, at 25C)`),
+         !is.na(`Wet Mass (g)`),
+         `Wet Mass (g)` > 0,
+         `Metabolic Rate (W, at 25C)` > 0,
          !is.na(Group)) %>%
-  mutate(log_metabolic_rate = log(`Metabolic Rate (W, at 25C)`),
-         Group = as.factor(Group))
+  count(Group, sort = TRUE) %>%
+  slice_head(n = 10)
 
-ggplot(clean_data, aes(x = reorder(Group, log_metabolic_rate, median), 
-                        y = log_metabolic_rate, fill = Group)) +
-  geom_boxplot(show.legend = FALSE) +
+ggplot(top_groups, aes(x = reorder(Group, n), y = n)) +
+  geom_col(fill = "#264653") +
+  geom_text(aes(label = comma(n)), hjust = -0.1, size = 3.5) +
   coord_flip() +
-  labs(title = "Log Metabolic Rate by Organism Group",
-       x = "Group",
-       y = "Log Metabolic Rate (W at 25°C)") +
-  theme_minimal()
-
+  scale_y_continuous(labels = comma, expand = expansion(mult = c(0, 0.15))) +
+  labs(title = "Sample size by organism group (top 10)",
+       subtitle = "Fishes, mammals, and birds dominate the dataset",
+       x = NULL, y = "Number of measurements") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title.position = "plot",
+        panel.grid.major.y = element_blank())
 ```
-This box plot shows how metabolic rates differ across organism groups. 
-We log-transformed the metabolic rate because the raw values span many 
-orders of magnitude, making patterns hard to see. The plot shows clear 
-differences between groups — mammals and birds tend to have higher 
-metabolic rates than fish, insects, and bacteria — which suggests that 
-metabolism does vary systematically across groups.
+
+The dataset is heavily imbalanced. Fishes alone account for roughly 43% of the cleaned rows, and the top three groups (fishes, mammals, birds) together account for almost three quarters of the data. This matters for our kNN classifier because k-nearest-neighbors will tend to favor the majority class when the neighborhood around a point is mixed. We return to this point in §4 when we look at the model's error pattern.
+
+### 3.2 Mass vs. metabolic rate on a log-log scale
+
+This is the most informative single plot for this dataset, because metabolic rate scales with body mass in a well-known near-linear relationship on the log-log scale, often called Kleiber's law. Plotting it serves two purposes. First, it sanity checks the data, since we should see a clear positive trend if the dataset is recording what it claims to record. Second, it shows whether organism groups separate in this two-dimensional feature space, which is exactly the space our kNN model uses.
+
+I use a log-log axis because both variables span more than fifteen orders of magnitude, and on a linear scale every point would collapse into the lower-left corner. The log transformation also turns the underlying power-law relationship into a straight line, which is much easier to read.
+
+```{r}
+# Filter to the same top 10 groups for visual clarity.
+viz_data <- metabolic_data %>%
+  filter(!is.na(`Metabolic Rate (W, at 25C)`),
+         !is.na(`Wet Mass (g)`),
+         `Wet Mass (g)` > 0,
+         `Metabolic Rate (W, at 25C)` > 0,
+         Group %in% top_groups$Group) %>%
+  mutate(Group = factor(Group, levels = rev(top_groups$Group)))
+
+ggplot(viz_data, aes(x = `Wet Mass (g)`, y = `Metabolic Rate (W, at 25C)`,
+                     color = Group)) +
+  geom_point(alpha = 0.35, size = 0.9) +
+  scale_x_log10(labels = label_log()) +
+  scale_y_log10(labels = label_log()) +
+  scale_color_brewer(palette = "Set1") +
+  labs(title = "Metabolic rate scales with body mass across all groups",
+       subtitle = "Each point is one organism, plotted on log-log axes",
+       x = "Wet mass (g, log scale)",
+       y = "Metabolic rate (W at 25°C, log scale)") +
+  guides(color = guide_legend(override.aes = list(alpha = 1, size = 2.5))) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title.position = "plot",
+        legend.title = element_blank())
+```
+
+The plot shows two things clearly. First, there is a strong positive relationship between body mass and metabolic rate that holds across every group, which is consistent with Kleiber's law. Second, the groups stack along this trend rather than spreading out across the whole plane, because bacteria sit in the lower left, fishes and insects fill the middle, and mammals and birds cluster in the upper right. This visual stacking is what makes the classification problem feasible at all, since the groups occupy partly distinct regions of the (log mass, log metabolic rate) plane. It also previews where the kNN model will struggle, because smaller mammals overlap with larger fishes and large insects.
+
+### 3.3 Distribution of metabolic rate by group
+
+The log-log scatter shows the joint distribution, but it is hard to read off a single group's typical metabolic rate from a cloud of points. A boxplot of the log metabolic rate by group makes the per-group center and spread easy to compare directly. I order the groups by median, so the chart reads from coldest metabolism at the top to warmest at the bottom.
+
+```{r}
+ggplot(viz_data,
+       aes(x = reorder(Group, log10(`Metabolic Rate (W, at 25C)`), median),
+           y = log10(`Metabolic Rate (W, at 25C)`),
+           fill = Group)) +
+  geom_boxplot(outlier.size = 0.5, outlier.alpha = 0.3, show.legend = FALSE) +
+  coord_flip() +
+  scale_fill_brewer(palette = "Set1") +
+  labs(title = "Log metabolic rate by organism group",
+       subtitle = "Groups are ordered by median metabolic rate, lowest at top",
+       x = NULL,
+       y = "log metabolic rate (W at 25C)") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title.position = "plot",
+        panel.grid.major.y = element_blank())
+```
+
+Mammals and birds are the two highest-metabolism groups, which makes sense biologically because both are warm blooded and need to maintain a high body temperature. Bacteria sit near the bottom for the opposite reason. There is substantial overlap between adjacent groups, especially among the cold-blooded animals like fishes, amphibians, reptiles, and insects, which warns us that no classifier using metabolic rate alone will reach 100% accuracy.
+
+### 3.4 Are we mixing different types of metabolic measurement?
+
+The original dataset records three main types of metabolic rate: basal (resting and post-absorptive), field (measured in the wild during typical activity), and maximum (during peak exertion). These can differ by a factor of ten or more for the same organism, so if some groups were dominated by one measurement type and other groups by another, an apparent group difference could really be a measurement type difference in disguise. I check this with a stacked bar chart.
+
+```{r}
+type_data <- metabolic_data %>%
+  filter(Group %in% top_groups$Group,
+         !is.na(`Type of Metabolic Rate`)) %>%
+  mutate(rate_type = fct_lump_n(`Type of Metabolic Rate`, n = 3,
+                                other_level = "Other"),
+         rate_type = factor(rate_type,
+                           levels = c("Basal", "Field", "Maximum", "Other")))
+
+ggplot(type_data, aes(x = Group, fill = rate_type)) +
+  geom_bar(position = "fill") +
+  coord_flip() +
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c("Basal" = "#2a9d8f",
+                               "Field" = "#f4a261",
+                               "Maximum" = "#e76f51",
+                               "Other" = "lightgray")) +
+  labs(title = "Mix of metabolic rate measurement types, by group",
+       subtitle = "Most groups are dominated by basal measurements",
+       x = NULL, y = "Share of measurements",
+       fill = "Measurement type") +
+  theme_minimal(base_size = 11) +
+  theme(plot.title.position = "plot",
+        panel.grid.major.y = element_blank())
+```
+
+The mix is uneven across groups, but it is not catastrophic. Most groups are dominated by basal measurements, which is the most controlled and most comparable type. Insects, crustaceans, and seedlings have a higher share of "other," which here includes things like dark respiration for plants and endogenous rate for microbes. This is a real caveat for our analysis, since some of the apparent group differences in metabolic rate are partly driven by which measurement type was easiest to take in the lab for that group. We note this explicitly in §5 when discussing limitations.
+
+### 3.5 What we take away from EDA
+
+Three findings from EDA shape the rest of the report:
+
+1. **Class imbalance is real.** Fishes, mammals, and birds account for the bulk of the data. Any model we fit needs to be evaluated for whether it is just predicting the majority class, which we do via per-class accuracy in §4 rather than relying on overall accuracy alone.
+2. **Mass is at least as predictive as metabolic rate.** The log-log scatter shows the groups stack along the mass and metabolic axis, so adding `log_mass` to our kNN should help meaningfully, and that is why the model in §4 uses both features rather than metabolic rate alone.
+3. **Measurement type is a confounder.** Different groups are measured differently, so comparing raw metabolic rates across groups is not perfectly apples to apples. We mitigate this by restricting downstream models to the major groups, where basal measurements dominate, and by acknowledging the limitation in our discussion.
 
 4. Use Machine Learning Algorithms
 You must use at least one of each: a Regression-based algorithm (SLR/MLR, logistic regression), and a Non-Regression based algorithm (kNN, CART, random forests).
@@ -118,19 +227,20 @@ knn_preds <- knn(train_x, test_x, train_y, k = 5)
 knn_acc <- mean(knn_preds == test_data$Group)
 cat("kNN Accuracy:", round(knn_acc * 100, 2), "%")
 ```
-Our kNN model correctly classified organisms into their groups 72% of 
-the time using only metabolic rate and body mass. Given that we are 
-trying to distinguish between many different groups of life — mammals, 
-birds, fish, insects, bacteria and more — this is a strong result. 
-It suggests that metabolic rate and body mass together carry real 
-information about what kind of organism something is. The remaining 
-28% of misclassifications likely occur between groups that overlap 
+Our kNN model correctly classified organisms into their groups 72% of
+the time using only metabolic rate and body mass. Given that we are
+trying to distinguish between many different groups of life — mammals,
+birds, fish, insects, bacteria and more — this is a strong result.
+It suggests that metabolic rate and body mass together carry real
+information about what kind of organism something is. The remaining
+28% of misclassifications likely occur between groups that overlap
 in metabolic space, such as smaller mammals and larger insects.
 
-5. A discussion of what you’ve learned from your work about the context and recommendations for future work.
+5. A discussion of what you've learned from your work about the context and recommendations for future work.
 
 6. Author Contributions – list out who did what in the project.
 Jiya - The first boxplot visual, setting the stage, explain data provenance, KNN model
+Min - Expanded EDA section (§3.1 to §3.5) with four visualizations and accompanying narrative. Some of the EDA prose and code was drafted with AI assistance (Claude) using the cleaned dataset, and all interpretation and final wording were reviewed and edited by Min.
 
 7. References – Citation style is your choice, but all sources should be documented (both in text and in the References section). This includes where you got your data.
 Hoehler, T. M., et al. (2023). The metabolic rate of the biosphere and its components. Proceedings of the National Academy of Sciences, 120(25). https://www.pnas.org/doi/10.1073/pnas.2303764120
@@ -142,5 +252,5 @@ Wikipedia contributors. (2024). Basal metabolic rate. Wikipedia. https://en.wiki
 ```{r}
 ## Load all necessary packages
 library(readxl)
-metabolic_data <- read_excel("~/Downloads/pnas.2303764120.sd01.xlsx", sheet = "Metabolic_Data")
+metabolic_data <- read_excel("pnas.2303764120.sd01.xlsx", sheet = "Metabolic_Data")
 ```
