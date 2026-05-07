@@ -1,0 +1,79 @@
+4. Use Machine Learning Algorithms
+
+Each algorithm must be explained for a general audience.
+All results should be explained.
+Where appropriate, comparisons between methods should be discussed. This includes highlighting the strengths and weaknesses of the various approaches as well as when each is appropriate.
+
+groups: Birds and Fishes
+Regression based algorithm: MLR
+```{r}
+library(dplyr)
+metabolicData <- metabolic_data %>%
+  filter(Group %in% c("Bird", "Fishes")) %>%
+  mutate(Group = factor(Group))
+
+logModel <- glm(
+  Group ~ 
+    `Metabolic Rate (W, at T)...18` +
+    `Metabolic Rate (W, at T)...19` +
+    `Metabolic Rate (W, at 25C)`,
+  data = metabolicData,
+  family = binomial
+)
+summary(logModel)
+predicted_probs <- predict(logModel, type = "response")
+predicted_group <- ifelse(predicted_probs > 0.5, "Fishes", "Bird")
+```
+
+Non-regression based: classification tree
+```{r}
+# Load packages 
+packages <- c("tidyverse", "rpart", "rpart.plot", "partykit", "rattle")
+
+invisible(
+  lapply(
+    X = packages,
+    FUN = library,
+    character.only = TRUE,
+    quietly = TRUE
+  )
+)
+
+# Wrangle metabolic data
+modelMetabolic <- metabolic_data %>%
+  filter(Group %in% c("Bird", "Fishes")) %>%
+  select(
+    Group,
+    `Metabolic Rate (W, at T)...18`,
+    `Metabolic Rate (W, at T)...19`,
+    `Metabolic Rate (W, at 25C)`
+  ) %>%
+  drop_na() %>%
+  mutate(
+    Group = factor(Group),
+    tempID = row_number(),
+    .before = Group
+  )
+
+#80-20 train/test split
+set.seed(5625)
+trainingData <- modelMetabolic %>%
+  group_by(Group) %>%
+  slice_sample(prop = 0.8)
+testingData <- modelMetabolic %>%
+  filter(!(tempID %in% trainingData$tempID))
+
+#Grow the decision tree
+rpartMetabolic1 <- rpart(
+  formula = Group ~ 
+    `Metabolic Rate (W, at T)...18` +
+    `Metabolic Rate (W, at T)...19` +
+    `Metabolic Rate (W, at 25C)`,
+  data = trainingData,
+  method = "class",
+  parms = list(split = "information")
+)
+
+#Visualize the tree using rparty package
+plot(as.party(rpartMetabolic1))
+```
