@@ -134,11 +134,6 @@ A few open questions before we finalize the EDA:
 - Anything else we want to look at before moving to §4?
 
 4. Use Machine Learning Algorithms
-You must use at least one of each: a Regression-based algorithm (SLR/MLR, logistic regression), and a Non-Regression based algorithm (kNN, CART, random forests).
-Using an Unsupervised Learning algorithm (clustering, PCA) is highly encouraged, but not required.
-Each algorithm must be explained for a general audience.
-All results should be explained.
-Where appropriate, comparisons between methods should be discussed. This includes highlighting the strengths and weaknesses of the various approaches as well as when each is appropriate.
 ```{r}
 clean_data <- metabolic_data %>%
   filter(!is.na(`Metabolic Rate (W, at 25C)`),
@@ -181,11 +176,84 @@ information about what kind of organism something is. The remaining
 28% of misclassifications likely occur between groups that overlap
 in metabolic space, such as smaller mammals and larger insects.
 
+groups: Birds and Fishes
+Regression based algorithm: MLR
+```{r}
+library(dplyr)
+metabolicData <- metabolic_data %>%
+  filter(Group %in% c("Bird", "Fishes")) %>%
+  mutate(Group = factor(Group))
+
+logModel <- glm(
+  Group ~ 
+    `Metabolic Rate (W, at T)...18` +
+    `Metabolic Rate (W, at T)...19` +
+    `Metabolic Rate (W, at 25C)`,
+  data = metabolicData,
+  family = binomial
+)
+summary(logModel)
+predicted_probs <- predict(logModel, type = "response")
+predicted_group <- ifelse(predicted_probs > 0.5, "Fishes", "Bird")
+```
+Non-regression based: classification tree
+```{r}
+# Load packages 
+packages <- c("tidyverse", "rpart", "rpart.plot", "partykit", "rattle")
+
+invisible(
+  lapply(
+    X = packages,
+    FUN = library,
+    character.only = TRUE,
+    quietly = TRUE
+  )
+)
+
+# Wrangle metabolic data
+modelMetabolic <- metabolic_data %>%
+  filter(Group %in% c("Bird", "Fishes")) %>%
+  select(
+    Group,
+    `Metabolic Rate (W, at T)...18`,
+    `Metabolic Rate (W, at T)...19`,
+    `Metabolic Rate (W, at 25C)`
+  ) %>%
+  drop_na() %>%
+  mutate(
+    Group = factor(Group),
+    tempID = row_number(),
+    .before = Group
+  )
+
+#80-20 train/test split
+set.seed(5625)
+trainingData <- modelMetabolic %>%
+  group_by(Group) %>%
+  slice_sample(prop = 0.8)
+testingData <- modelMetabolic %>%
+  filter(!(tempID %in% trainingData$tempID))
+
+#Grow the decision tree
+rpartMetabolic1 <- rpart(
+  formula = Group ~ 
+    `Metabolic Rate (W, at T)...18` +
+    `Metabolic Rate (W, at T)...19` +
+    `Metabolic Rate (W, at 25C)`,
+  data = trainingData,
+  method = "class",
+  parms = list(split = "information")
+)
+
+#Visualize the tree using rparty package
+plot(as.party(rpartMetabolic1))
+```
 5. A discussion of what you've learned from your work about the context and recommendations for future work.
 
 6. Author Contributions – list out who did what in the project.
 Jiya - The first boxplot visual, setting the stage, explain data provenance, KNN model
 Min - Preliminary EDA (§3.1) and first-draft mass vs metabolic rate visualization (§3.2).
+Grace - Multiple Linear Regression model and classification tree
 
 7. References – Citation style is your choice, but all sources should be documented (both in text and in the References section). This includes where you got your data.
 Hoehler, T. M., et al. (2023). The metabolic rate of the biosphere and its components. Proceedings of the National Academy of Sciences, 120(25). https://www.pnas.org/doi/10.1073/pnas.2303764120
