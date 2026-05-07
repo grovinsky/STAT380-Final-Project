@@ -251,7 +251,7 @@ plot(as.party(rpartMetabolic1))
 5. A discussion of what you've learned from your work about the context and recommendations for future work.
 
 6. Author Contributions – list out who did what in the project.
-Jiya - The first boxplot visual, setting the stage, explain data provenance, KNN model
+Jiya - The boxplot visual, setting the stage, explain data provenance, KNN model
 Min - Preliminary EDA (§3.1) and first-draft mass vs metabolic rate visualization (§3.2).
 Grace - Multiple Linear Regression model and classification tree
 
